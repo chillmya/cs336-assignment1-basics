@@ -85,32 +85,34 @@ def _count_pretokens(input_path: str | os.PathLike, special_tokens: list[str]) -
     Special tokens should act as hard boundaries and should not themselves
     contribute to BPE merge statistics.
     """
-    # 1) Read the full training text from disk as UTF-8.
-    text = Path(input_path).read_text(encoding="utf-8")
-
-    # 2) Counter maps: Pretoken (tuple of single-byte tokens) -> frequency.
     pretoken_counts: Counter[Pretoken] = Counter()
 
-    # 3) Split text around special tokens so merges never cross those boundaries.
-    #    The split function removes delimiters, so special tokens are excluded.
-    for segment in _split_on_special_tokens(text, special_tokens):
-        # 4) Find all GPT-2 style pre-token matches in this segment.
-        for match in re.finditer(GPT2_PRETOKEN_PATTERN, segment):
-            # 5) Full matched token text, e.g. " hello" or "123" or "!!".
-            token_text = match.group(0)
+    if len(special_tokens) == 1:
+        special_token_bytes = special_tokens[0].encode("utf-8")
+        buffer = b""
+        with Path(input_path).open("rb") as f:
+            while chunk := f.read(1024 * 1024):
+                pieces = (buffer + chunk).split(special_token_bytes)
+                for segment_bytes in pieces[:-1]:
+                    _count_pretokens_in_segment(segment_bytes.decode("utf-8"), pretoken_counts)
+                buffer = pieces[-1]
 
-            # 6) Convert token text into raw UTF-8 bytes.
-            token_bytes = token_text.encode("utf-8")
+        if buffer:
+            _count_pretokens_in_segment(buffer.decode("utf-8"), pretoken_counts)
+    else:
+        text = Path(input_path).read_text(encoding="utf-8")
+        for segment in _split_on_special_tokens(text, special_tokens):
+            _count_pretokens_in_segment(segment, pretoken_counts)
 
-            # 7) Convert bytes to tuple of single-byte byte strings:
-            #    b" hi" -> (b" ", b"h", b"i")
-            pretoken = tuple(bytes([b]) for b in token_bytes)
-
-            # 8) Count this pretoken occurrence.
-            pretoken_counts[pretoken] += 1
-
-    # 9) Return frequency table used by BPE training.
     return pretoken_counts
+
+
+def _count_pretokens_in_segment(segment: str, pretoken_counts: Counter[Pretoken]) -> None:
+    """Count GPT-2-style pre-tokens from a text segment with no special tokens."""
+    for match in re.finditer(GPT2_PRETOKEN_PATTERN, segment):
+        token_bytes = match.group(0).encode("utf-8")
+        pretoken = tuple(bytes([b]) for b in token_bytes)
+        pretoken_counts[pretoken] += 1
 
 
 def _split_on_special_tokens(text: str, special_tokens: list[str]) -> list[str]:

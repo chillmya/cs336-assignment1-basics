@@ -1,0 +1,12 @@
+{
+  "input_path": "data/TinyStoriesV2-GPT4-train.txt",
+  "input_size_bytes": 2227753162,
+  "vocab_size": 10000,
+  "special_tokens": [
+    "<|endoftext|>"
+  ],
+  "num_vocab_items": 10000,
+  "num_merges": 9743,
+  "elapsed_seconds": 474.22831773757935,
+  "max_rss_mb": 6003.953125
+}
