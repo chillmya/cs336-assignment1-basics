@@ -4,9 +4,11 @@ import numpy as np
 from einops import rearrange, einsum
 
 
-images = torch.tensor([1, 2])  
+x  = torch.tensor(torch.arange(12))
+print(x)
 
-dim_value = rearrange(images,    "b   ->  1 b")
+x = rearrange(x, '... (n two) -> ... n two', two=2)
+print(x)
 
-print(dim_value) 
-
+x1 = x[..., 0]
+print(x1)
