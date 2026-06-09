@@ -227,7 +227,25 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    from cs336_basics.multihead_self_attention import MultiHeadSelfAttention
+
+    mha = MultiHeadSelfAttention(
+        d_model=d_model,
+        num_heads=num_heads,
+        device=in_features.device,
+        dtype=in_features.dtype,
+        rope_theta=theta,
+        max_seq_len=max_seq_len,
+    )
+
+    mha.load_state_dict({
+        "W_q.weight": q_proj_weight,
+        "W_k.weight": k_proj_weight,
+        "W_v.weight": v_proj_weight,
+        "W_o.weight": o_proj_weight,
+    })
+
+    return mha(in_features, token_positions)
 
 
 def run_rope(
@@ -326,7 +344,31 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.transformer_block import TransformerBlock
+    transformer_block = TransformerBlock(
+        d_model=d_model, 
+        num_heads=num_heads, 
+        d_ff=d_ff, 
+        rope_theta=theta, 
+        max_seq_len=max_seq_len,
+        device=in_features.device,
+        dtype=in_features.dtype,
+    )
+
+    transformer_block.load_state_dict({
+        "mha.W_q.weight": weights["attn.q_proj.weight"],
+        "mha.W_k.weight": weights["attn.k_proj.weight"],
+        "mha.W_v.weight": weights["attn.v_proj.weight"],
+        "mha.W_o.weight": weights["attn.output_proj.weight"],
+        "norm1.weight": weights["ln1.weight"],
+        "ffn.w1.weight": weights["ffn.w1.weight"],
+        "ffn.w2.weight": weights["ffn.w2.weight"],
+        "ffn.w3.weight": weights["ffn.w3.weight"],
+        "norm2.weight": weights["ln2.weight"],
+    })
+
+    return transformer_block(in_features)
+
 
 
 def run_transformer_lm(
@@ -408,7 +450,44 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from cs336_basics.transformer_lm import TransformerLM
+
+    transformer_lm = TransformerLM(
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        rope_theta=rope_theta,
+        context_len=context_length,
+        vocab_size=vocab_size,
+        num_layers=num_layers,
+        device=in_indices.device,
+        dtype=weights["token_embeddings.weight"].dtype,
+    )
+
+    state_dict = {
+        "token_embedding.weight": weights["token_embeddings.weight"],
+        "norm.weight": weights["ln_final.weight"],
+        "output_embedding.weight": weights["lm_head.weight"],
+    }
+
+    for layer_idx in range(num_layers):
+        reference_prefix = f"layers.{layer_idx}"
+        module_prefix = f"layers.{layer_idx}"
+        state_dict.update({
+            f"{module_prefix}.mha.W_q.weight": weights[f"{reference_prefix}.attn.q_proj.weight"],
+            f"{module_prefix}.mha.W_k.weight": weights[f"{reference_prefix}.attn.k_proj.weight"],
+            f"{module_prefix}.mha.W_v.weight": weights[f"{reference_prefix}.attn.v_proj.weight"],
+            f"{module_prefix}.mha.W_o.weight": weights[f"{reference_prefix}.attn.output_proj.weight"],
+            f"{module_prefix}.norm1.weight": weights[f"{reference_prefix}.ln1.weight"],
+            f"{module_prefix}.ffn.w1.weight": weights[f"{reference_prefix}.ffn.w1.weight"],
+            f"{module_prefix}.ffn.w2.weight": weights[f"{reference_prefix}.ffn.w2.weight"],
+            f"{module_prefix}.ffn.w3.weight": weights[f"{reference_prefix}.ffn.w3.weight"],
+            f"{module_prefix}.norm2.weight": weights[f"{reference_prefix}.ln2.weight"],
+        })
+
+    transformer_lm.load_state_dict(state_dict)
+
+    return transformer_lm(in_indices)
 
 
 def run_rmsnorm(
@@ -456,7 +535,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return in_features * torch.sigmoid(in_features)
 
 
 def run_get_batch(
