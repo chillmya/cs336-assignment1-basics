@@ -1,14 +1,14 @@
 
 import torch
 import numpy as np
-from einops import rearrange, einsum
+from einops import rearrange, einsum, reduce
 
 
 x  = torch.tensor(torch.arange(12))
 print(x)
 
-x = rearrange(x, '... (n two) -> ... n two', two=2)
-print(x)
+x = rearrange(x, "... -> ... 1")
+x = rearrange(x, "... 1 -> ...")
 
-x1 = x[..., 0]
-print(x1)
+max_logits = reduce(x, "... vocab -> ...", "max")
+print(max_logits)
